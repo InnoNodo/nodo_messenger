@@ -1,6 +1,7 @@
 import socket, threading
 
 from config import Settings
+from database import get_session_maker
 
 settings = Settings()
 
@@ -9,6 +10,8 @@ PORT = settings.server.PORT
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+session_maker = get_session_maker(settings.database.connection_string)
 
 server.bind((LOCALHOST, PORT))
 print("Server was started")
@@ -26,7 +29,7 @@ class ClientThread(threading.Thread):
             msg = data.decode()
             print(msg)
 
-            if msg == '':
+            if msg == 'exit':
                 print("Unconnection")
                 break
 
@@ -34,5 +37,5 @@ while True:
     server.listen(1)
     clientsock, clientAddress = server.accept()
     newthread = ClientThread(clientsock, clientAddress)
-    newthread.start()
+    newthread.run()
 
