@@ -1,8 +1,12 @@
 import socket
 import threading
+from sqlalchemy.exc import NoResultFound
+from sqlalchemy.orm import sessionmaker
+from database import get_session_maker
+from database.entities import User
 
 from config import Settings
-from database import get_session_maker
+from werkzeug.security import generate_password_hash, check_password_hash
 
 settings = Settings()
 
@@ -18,59 +22,81 @@ server.bind((LOCALHOST, PORT))
 print("Server was started")
 
 is_running = True
-clients = []
+clients = {}
 
 class ClientThread(threading.Thread):
     def __init__(self, clientsocket, clientaddress):
         threading.Thread.__init__(self)
         self.csocket = clientsocket
-        clients.append(clientsocket)
         print("New connection: ", clientaddress)
 
     def run(self):
-        msg = ''
         try:
-            while True:
-                data = self.csocket.recv(4096)
-                msg = data.decode()
-                if not data:
-                    break
-
-                if msg == 'exit':
-                    print("Client was unconnected")
-                    break
-                else:
-                    print(f"Client says: {msg}")
+            self.handle_auth()
+            self.listen_for_messages()
         except ConnectionError:
             print("Connection closed abruptly.")
         finally:
-            clients.remove(self.csocket)
             self.csocket.close()
 
-def broadcast_message():
-    while is_running:
-        try:
-            message = input()
-            if message.lower() == 'exit':
-                stop_server()
-                break
-            for client in clients:
+    def handle_auth(self):
+        session = session_maker
+        while True:
+            self.csocket.sendall(b"Do you want to register or login? (r/l): ")
+            choice = self.csocket.recv(1024).decode().strip()
+
+            if choice == 'r':
+                self.csocket.sendall(b"Enter username: ")
+                username = self.csocket.recv(1024).decode().strip()
+
+                self.csocket.sendall(b"Enter password: ")
+                password = self.csocket.recv(1024).decode().strip()
+
+                hashed_password = generate_password_hash(password)
+
+                user = session.query(User).filter_by(username=username).first()
+                if user:
+                    self.csocket.sendall(b"Username already exists. Try again.\n")
+                else:
+                    new_user = User(username=username, password=hashed_password)
+                    session.add(new_user)
+                    session.commit()
+                    self.csocket.sendall(b"Registration successful.\n")
+                    clients[self.csocket] = new_user
+                    break
+
+            elif choice == 'l':
+                self.csocket.sendall(b"Enter username: ")
+                username = self.csocket.recv(1024).decode().strip()
+
+                self.csocket.sendall(b"Enter password: ")
+                password = self.csocket.recv(1024).decode().strip()
+
                 try:
-                    client.sendall(bytes(message, 'UTF-8'))
-                except ConnectionError:
-                    clients.remove(client)
-        except KeyboardInterrupt:
-            stop_server()
-            break
+                    user = session.query(User).filter_by(username=username).one()
+                    if check_password_hash(user.password, password):
+                        self.csocket.sendall(b"Login successful.\n")
+                        clients[self.csocket] = user
+                        break
+                    else:
+                        self.csocket.sendall(b"Invalid password. Try again.\n")
+                except NoResultFound:
+                    self.csocket.sendall(b"Username not found. Try again.\n")
+
+    def listen_for_messages(self):
+        while True:
+            data = self.csocket.recv(4096)
+            msg = data.decode()
+
+            if msg == 'exit':
+                print("User disconnected.")
+                break
+            print(f"{clients[self.csocket].username}: {msg}")
 
 def stop_server():
     global is_running
     is_running = False
     server.close()
-    exit()
-
-admin_thread = threading.Thread(target=broadcast_message)
-admin_thread.start()
 
 while is_running:
     try:
