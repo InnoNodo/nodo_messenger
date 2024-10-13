@@ -3,4 +3,4 @@ LOCALHOST = "127.0.0.1"
 PORT = 1488
 
 [database]
-connection_string = "sqlite+aiosqlite:///./data.sqlite"
+connection_string = "sqlite:///./data.sqlite"

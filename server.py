@@ -1,10 +1,8 @@
 import socket
 import threading
 from sqlalchemy.exc import NoResultFound
-from sqlalchemy.orm import sessionmaker
 from database import get_session_maker
 from database.entities import User
-
 from config import Settings
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -28,6 +26,7 @@ class ClientThread(threading.Thread):
     def __init__(self, clientsocket, clientaddress):
         threading.Thread.__init__(self)
         self.csocket = clientsocket
+        self.username = None
         print("New connection: ", clientaddress)
 
     def run(self):
@@ -37,51 +36,58 @@ class ClientThread(threading.Thread):
         except ConnectionError:
             print("Connection closed abruptly.")
         finally:
+            if self.username in clients:
+                del clients[self.username]
             self.csocket.close()
 
     def handle_auth(self):
-        session = session_maker
-        while True:
-            self.csocket.sendall(b"Do you want to register or login? (r/l): ")
-            choice = self.csocket.recv(1024).decode().strip()
+        session = session_maker()
+        try:
+            while True:
+                self.csocket.sendall(b"Do you want to register or login? (r/l): ")
+                choice = self.csocket.recv(1024).decode().strip()
 
-            if choice == 'r':
-                self.csocket.sendall(b"Enter username: ")
-                username = self.csocket.recv(1024).decode().strip()
+                if choice == 'r':
+                    self.csocket.sendall(b"Enter username: ")
+                    username = self.csocket.recv(1024).decode().strip()
 
-                self.csocket.sendall(b"Enter password: ")
-                password = self.csocket.recv(1024).decode().strip()
+                    self.csocket.sendall(b"Enter password: ")
+                    password = self.csocket.recv(1024).decode().strip()
 
-                hashed_password = generate_password_hash(password)
+                    hashed_password = generate_password_hash(password)
 
-                user = session.query(User).filter_by(username=username).first()
-                if user:
-                    self.csocket.sendall(b"Username already exists. Try again.\n")
-                else:
-                    new_user = User(username=username, password=hashed_password)
-                    session.add(new_user)
-                    session.commit()
-                    self.csocket.sendall(b"Registration successful.\n")
-                    clients[self.csocket] = new_user
-                    break
-
-            elif choice == 'l':
-                self.csocket.sendall(b"Enter username: ")
-                username = self.csocket.recv(1024).decode().strip()
-
-                self.csocket.sendall(b"Enter password: ")
-                password = self.csocket.recv(1024).decode().strip()
-
-                try:
-                    user = session.query(User).filter_by(username=username).one()
-                    if check_password_hash(user.password, password):
-                        self.csocket.sendall(b"Login successful.\n")
-                        clients[self.csocket] = user
-                        break
+                    user = session.query(User).filter_by(username=username).first()
+                    if user:
+                        self.csocket.sendall(b"Username already exists. Try again.\n")
                     else:
-                        self.csocket.sendall(b"Invalid password. Try again.\n")
-                except NoResultFound:
-                    self.csocket.sendall(b"Username not found. Try again.\n")
+                        new_user = User(username=username, password=hashed_password)
+                        session.add(new_user)
+                        session.commit()
+                        self.csocket.sendall(b"Registration successful.\n")
+                        self.username = username
+                        clients[self.username] = self.csocket
+                        break
+
+                elif choice == 'l':
+                    self.csocket.sendall(b"Enter username: ")
+                    username = self.csocket.recv(1024).decode().strip()
+
+                    self.csocket.sendall(b"Enter password: ")
+                    password = self.csocket.recv(1024).decode().strip()
+
+                    try:
+                        user = session.query(User).filter_by(username=username).one()
+                        if check_password_hash(user.password, password):
+                            self.csocket.sendall(b"Login successful.\n")
+                            self.username = username
+                            clients[self.username] = self.csocket
+                            break
+                        else:
+                            self.csocket.sendall(b"Invalid password. Try again.\n")
+                    except NoResultFound:
+                        self.csocket.sendall(b"Username not found. Try again.\n")
+        finally:
+            session.close()
 
     def listen_for_messages(self):
         while True:
@@ -89,14 +95,25 @@ class ClientThread(threading.Thread):
             msg = data.decode()
 
             if msg == 'exit':
-                print("User disconnected.")
+                print(f"{self.username} disconnected.")
                 break
-            print(f"{clients[self.csocket].username}: {msg}")
+            elif msg.startswith("@"):
+                recipient, message = msg[1:].split(" ", 1)
+                if recipient in clients:
+                    recipient_socket = clients[recipient]
+                    recipient_socket.sendall(bytes(f"{self.username}: {message}", "UTF-8"))
+                else:
+                    self.csocket.sendall(b"User not found.\n")
+            else:
+                print(f"{self.username}: {msg}")
 
 def stop_server():
     global is_running
     is_running = False
-    server.close()
+    for client_socket in clients.values():
+        client_socket.sendall(b"Server is shutting down.")
+        client_socket.close()
+    exit()
 
 while is_running:
     try:
@@ -104,5 +121,6 @@ while is_running:
         clientsock, clientAddress = server.accept()
         newthread = ClientThread(clientsock, clientAddress)
         newthread.start()
-    except OSError:
-        print("Server stopped listening.")
+    except KeyboardInterrupt:
+        stop_server()
+

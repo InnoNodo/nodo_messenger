@@ -1,6 +1,5 @@
 import socket
 from threading import Thread
-
 from config import Settings
 
 SERVER = Settings().server.LOCALHOST
@@ -8,16 +7,16 @@ PORT = Settings().server.PORT
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect((SERVER, PORT))
-print("You succesfully connected to the server")
+print("You successfully connected to the server")
 
 def task():
     while True:
         try:
             in_data = client.recv(4096)
             if not in_data:
-                print("Connection closed by the server.")
+                print("You were disconnected from server.")
                 break
-            print("From server: ", in_data.decode())
+            print(in_data.decode())
         except ConnectionError:
             break
 
@@ -26,8 +25,7 @@ def task2():
         out_data = input()
         if out_data == 'exit':
             client.sendall(bytes(out_data, 'UTF-8'))
-            client.close()
-            break
+            exit()
         client.sendall(bytes(out_data, 'UTF-8'))
 
 t1 = Thread(target=task2)
