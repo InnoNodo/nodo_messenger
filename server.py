@@ -3,10 +3,9 @@ import threading
 from sqlalchemy.exc import NoResultFound
 from database import get_session_maker
 from database.entities import User
-from config import Settings
 from werkzeug.security import generate_password_hash, check_password_hash
 
-LOCALHOST = "127.0.0.1"
+LOCALHOST = "77.246.102.127"
 PORT = 1488
 
 server = socket(AF_INET, SOCK_STREAM)

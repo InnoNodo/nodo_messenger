@@ -10,7 +10,7 @@ from kivy.properties import StringProperty
 from kivy.clock import Clock
 import threading
 
-SERVER = "127.0.0.1"
+SERVER = "77.246.102.127"
 PORT = 1488
 
 client = socket(AF_INET, SOCK_STREAM)
