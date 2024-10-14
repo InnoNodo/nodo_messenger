@@ -1,8 +1,12 @@
 # Nodo messenger
 
 Open-source messenger for communicating with friends in secure channel
+
+## Installation for Windows
+
+  Find .exe file in dist
    
-## Deployment
+## Installation for other OS
 
   1 Clone repository to your machine
 ```bash
