@@ -1,4 +1,4 @@
-import socket
+from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 import threading
 from sqlalchemy.exc import NoResultFound
 from database import get_session_maker
@@ -6,15 +6,13 @@ from database.entities import User
 from config import Settings
 from werkzeug.security import generate_password_hash, check_password_hash
 
-settings = Settings()
+LOCALHOST = "127.0.0.1"
+PORT = 1488
 
-LOCALHOST = settings.server.LOCALHOST
-PORT = settings.server.PORT
+server = socket(AF_INET, SOCK_STREAM)
+server.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-session_maker = get_session_maker(settings.database.connection_string)
+session_maker = get_session_maker("sqlite:///./data.sqlite")
 
 server.bind((LOCALHOST, PORT))
 print("Server was started")
@@ -105,7 +103,9 @@ class ClientThread(threading.Thread):
                 else:
                     self.csocket.sendall(b"User not found.\n")
             else:
-                print(f"{self.username}: {msg}")
+                response = f"{self.username}: {msg}"
+                print(response)
+                self.csocket.sendall(bytes(response, "UTF-8"))
 
 def stop_server():
     global is_running
@@ -123,4 +123,3 @@ while is_running:
         newthread.start()
     except KeyboardInterrupt:
         stop_server()
-
