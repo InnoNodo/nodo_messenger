@@ -6,7 +6,7 @@ Open-source messenger for communicating with friends in secure channel
 
   Find .exe file in dist
    
-## Installation for other OS
+## Installation for other OS(in future it will be easier)
 
   1 Clone repository to your machine
 ```bash
